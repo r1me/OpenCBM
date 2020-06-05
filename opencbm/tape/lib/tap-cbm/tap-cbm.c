@@ -221,10 +221,10 @@ int Extract_and_Verify_TAP_Header_Contents(HANDLE hHandle)
         return TAP_CBM_Status_Error_Wrong_video;
 
     // Extract signal number (sum of all signal bytes).
-    ByteCount = (unsigned char) (pInfoBlock->header[0x10]);
-    ByteCount = (ByteCount << 8) + (unsigned char) (pInfoBlock->header[0x11]);
+    ByteCount = (unsigned char) (pInfoBlock->header[0x13]);
     ByteCount = (ByteCount << 8) + (unsigned char) (pInfoBlock->header[0x12]);
-    ByteCount = (ByteCount << 8) + (unsigned char) (pInfoBlock->header[0x13]);
+    ByteCount = (ByteCount << 8) + (unsigned char) (pInfoBlock->header[0x11]);
+    ByteCount = (ByteCount << 8) + (unsigned char) (pInfoBlock->header[0x10]);
     pInfoBlock->ByteCount = ByteCount;
 
     return TAP_CBM_Status_OK;
