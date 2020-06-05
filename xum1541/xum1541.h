@@ -30,6 +30,7 @@
 #define TEENSY2                 4
 #define PROMICRO                5
 #define PROMICRO_7406           6
+#define PROMICRO_TAPE           7
 
 #if MODEL == USBKEY
 #include "cpu-usbkey.h"
@@ -52,6 +53,9 @@
 #elif MODEL == PROMICRO_7406
 #include "cpu-promicro_7406.h"
 #include "board-promicro_7406.h"
+#elif MODEL == PROMICRO_TAPE
+#include "cpu-promicro_tape.h"
+#include "board-promicro_tape.h"
 #endif
 
 #include "xum1541_types.h"      // Version and protocol definitions

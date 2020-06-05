@@ -8,6 +8,7 @@
  * 2 of the License, or (at your option) any later version.
  */
 #include "xum1541.h"
+#include <tape_153x.c>
 
 /*
  * Basic inline IO functions where each byte is processed as it is
@@ -30,14 +31,18 @@ static uint8_t cmdSeqInProgress;
 // Current device state for the XUM1541_INIT response
 static uint8_t currState;
 
+#ifndef TAPE_COMMANDS_ONLY
 // Nibtools command state. See nib_parburst_read/write_checked()
 static bool suppressNibCmd;
 static uint8_t savedNibWrites[4], *savedNibWritePtr;
+#endif
 
 // Protocol handlers to use, set in cbm_init().
 struct ProtocolFunctions *cmds;
 
+#ifndef TAPE_COMMANDS_ONLY
 static int nib_check_write(uint8_t data);
+#endif
 
 // Allow setting tracking var usbDataLen from outside.
 void Set_usbDataLen(uint16_t Len) { usbDataLen = Len; }
@@ -72,10 +77,11 @@ cbm_init(void)
         return protoFn;
     }
 #endif
-
+#ifndef TAPE_COMMANDS_ONLY
     // Always use IEC as last resort.
     board_init_iec();
     protoFn = iec_init();
+#endif       
     return protoFn;
 }
 
@@ -211,7 +217,7 @@ usbRecvByte(uint8_t *data)
 
     return 0;
 }
-
+#ifndef TAPE_COMMANDS_ONLY
 static uint8_t
 ioReadLoop(ReadFn_t readFn, uint16_t len)
 {
@@ -273,7 +279,9 @@ ioWrite2Loop(Write2Fn_t writeFn, uint16_t len)
     usbIoDone();
     return 0;
 }
+#endif // TAPE_COMMANDS_ONLY
 
+#ifndef TAPE_COMMANDS_ONLY
 static uint8_t
 ioReadNibLoop(uint16_t len, bool earlyExit)
 {
@@ -366,6 +374,7 @@ ioWriteNibLoop(uint16_t len)
     usbIoDone();
     return 0;
 }
+#endif // TAPE_COMMANDS_ONLY
 
 #ifdef SRQ_NIB_SUPPORT
 static uint8_t
@@ -479,6 +488,7 @@ nib_srqburst_read_checked(void)
 }
 #endif // SRQ_NIB_SUPPORT
 
+#ifndef TAPE_COMMANDS_ONLY
 // Check with the state machine before actually doing the write
 static void
 nib_parburst_write_checked(uint8_t data)
@@ -551,6 +561,7 @@ nib_check_write(uint8_t data)
 
     return true;
 }
+#endif // TAPE_COMMANDS_ONLY
 
 /*
  * Delay a little (required), shutdown USB, disable watchdog and interrupts,
@@ -595,7 +606,9 @@ usbHandleControl(uint8_t cmd, uint8_t *replyBuf)
         replyBuf[0] = cmd;
         return 1;
     case XUM1541_INIT:
+#ifndef TAPE_COMMANDS_ONLY
         savedNibWritePtr = savedNibWrites;
+#endif
         board_set_status(STATUS_ACTIVE);
 
         // First time: init IO pins and probe for IEC or IEEE devices
@@ -660,7 +673,9 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
     uint8_t cmd, proto;
     int8_t ret;
     uint16_t len;
+#ifndef TAPE_COMMANDS_ONLY
     bool nibEarlyExit;
+#endif
 
     // Clear off "just did reset" flag each time a different cmd is run.
     cmdSeqInProgress &= ~XUM1541_DOING_RESET;
@@ -684,6 +699,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
             cmds->cbm_raw_read(len);
             ret = 0;
             break;
+#ifndef TAPE_COMMANDS_ONLY
         case XUM1541_S1:
             ioReadLoop(s1_read_byte, len);
             ret = 0;
@@ -710,6 +726,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
             ioReadLoop(nib_parburst_read_checked, len);
             ret = 0;
             break;
+#endif // TAPE_COMMANDS_ONLY
 #ifdef SRQ_NIB_SUPPORT
         case XUM1541_NIB_SRQ:
             ioReadNibSrqLoop(len);
@@ -746,6 +763,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
             len = cmds->cbm_raw_write(len, XUM_RW_FLAGS(request[1]));
             XUM_SET_STATUS_VAL(status, len);
             break;
+#ifndef TAPE_COMMANDS_ONLY
         case XUM1541_S1:
             ioWriteLoop(s1_write_byte, len);
             ret = 0;
@@ -770,6 +788,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
             ioWriteLoop(nib_parburst_write_checked, len);
             ret = 0;
             break;
+#endif // TAPE_COMMANDS_ONLY
 #ifdef SRQ_NIB_SUPPORT
         case XUM1541_NIB_SRQ:
             ioWriteNibSrqLoop(len);
@@ -793,7 +812,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
             ret = -1;
         }
         break;
-
+#ifndef TAPE_COMMANDS_ONLY
     /* Low-level port access */
     case XUM1541_GET_EOI:
         XUM_SET_STATUS_VAL(status, eoi ? 1 : 0);
@@ -847,6 +866,7 @@ usbHandleBulk(uint8_t *request, uint8_t *status)
         // Sets suppressNibCmd if we're doing a read/write track.
         nib_parburst_write_checked(request[1]);
         break;
+#endif // TAPE_COMMANDS_ONLY
 #ifdef SRQ_NIB_SUPPORT
     case XUM1541_SRQBURST_READ:
         // Disallow if in IEEE mode.

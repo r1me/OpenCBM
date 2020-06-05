@@ -4,6 +4,7 @@
  */
 
 #include "xum1541.h"
+#include "tape.h"
 
 #ifdef TAPE_SUPPORT
 
@@ -11,7 +12,7 @@
 #define TapeFirmwareVersion 0x0001
 
 // Tape State Register: Current state of tape operations.
-volatile uint8_t TSR = 0;
+volatile tape_config_t tape_config = { 0, 1, 0, 0 };
 
 // Enable definition when tape device hot-plug is allowed.
 //#define DeviceHotPlugAllowed
@@ -89,13 +90,24 @@ uint16_t Tape_GetTapeFirmwareVersion(void)
     return TapeFirmwareVersion;
 }
 
+uint8_t Tape_GetDeviceSerial(void)
+{
+    uint8_t device_serial = ~ eeprom_read_byte( EEPROM_SerialNumber );
+    
+    return device_serial;
+}
+
+void Tape_SetDeviceSerial(uint8_t device_serial)
+{
+    eeprom_write_byte( EEPROM_SerialNumber, ~ device_serial );
+}
 
 // Set tape device disconnect flag.
 // Disconnect and hot-plug of tape device is not allowed.
 // Flag is only cleared by Probe4TapeDevice() after ZoomFloppy restart.
 void Tape_RememberDisconnectStatus(void)
 {
-    TSR |= XUM1541_TAP_DISCONNECTED;
+    tape_config.TSR |= XUM1541_TAP_DISCONNECTED;
 }
 
 
@@ -108,7 +120,7 @@ uint16_t Tape_isDeviceConnected(void)
 #ifdef DeviceHotPlugAllowed
     return ((PIN_DETECT & IO_DETECT_IN) ? Tape_Status_ERROR_Device_Disconnected : Tape_Status_OK);
 #else
-    if ((PIN_DETECT & IO_DETECT_IN) || (TSR & XUM1541_TAP_DISCONNECTED))
+    if ((PIN_DETECT & IO_DETECT_IN) || (tape_config.TSR & XUM1541_TAP_DISCONNECTED))
     {
         Tape_RememberDisconnectStatus(); // Remember tape device was disconnected.
         return Tape_Status_ERROR_Device_Disconnected;
@@ -125,10 +137,10 @@ uint16_t Tape_isDeviceConnected(void)
 //   - Tape_Status_ERROR_Device_Not_Configured
 uint16_t Tape_isDeviceConfigured(void)
 {
-    if (TSR & XUM1541_TAP_DEVICE_CONFIG_READ)
+    if (tape_config.TSR & XUM1541_TAP_DEVICE_CONFIG_READ)
         return Tape_Status_OK_Device_Configured_for_Read;
 
-    if (TSR & XUM1541_TAP_DEVICE_CONFIG_WRITE)
+    if (tape_config.TSR & XUM1541_TAP_DEVICE_CONFIG_WRITE)
         return Tape_Status_OK_Device_Configured_for_Write;
 
     return Tape_Status_ERROR_Device_Not_Configured;
@@ -138,8 +150,8 @@ uint16_t Tape_isDeviceConfigured(void)
 // Clear device read/write configuration flags.
 void Tape_ClearDeviceConfigFlags(void)
 {
-    TSR &= (uint8_t)~XUM1541_TAP_DEVICE_CONFIG_READ;
-    TSR &= (uint8_t)~XUM1541_TAP_DEVICE_CONFIG_WRITE;
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_DEVICE_CONFIG_READ;
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_DEVICE_CONFIG_WRITE;
 }
 
 
@@ -147,10 +159,10 @@ void Tape_ClearDeviceConfigFlags(void)
 void Tape_ResetPorts(void)
 {
     // Set MOTOR CONTROL flag.
-    TSR |= XUM1541_TAP_MOTOR;
+    tape_config.TSR |= XUM1541_TAP_MOTOR;
 
     DDRB  = (uint8_t)IO_MOTOR;
-    PORTB = (uint8_t)~IO_MOTOR;
+    PORTB = (uint8_t)IO_MOTOR;
 
     DDRC  = 0;
     PORTC = 0xff;
@@ -179,7 +191,7 @@ void Tape_DisableAndClearTapeInterrupts(void)
     // Disable tape interrupts.
     PCICR  &= (uint8_t)~(1 << PCIE0);  // Disable PCINT7..0 interrupts, PCIE0="Pin Change Interrupt Enable 0", PCICR="Pin Change Interrupt Control Register".
     TIMSK1 &= (uint8_t)~( (1 << ICIE1)|(1 << TOIE1)|(1 << OCIE1A) );
-    PCMSK0 &= (uint8_t)~(1 << PCINT0); // Input pin change: SENSE
+    PCMSK0 &= (uint8_t)~(1 << PCINT2); // Input pin change: SENSE
     EIMSK  &= (uint8_t)~IN_EIMSK;      // External Interrupt Mask Register: disable disconnect interrupt.
     // Clear pending interrupt flags.
     TIFR1 = 0xff;            // Timer1 Interrupt Flag Register.
@@ -215,13 +227,13 @@ void Tape_SetBasicConfig(uint8_t CONFIG_OPTION)
     if (CONFIG_OPTION != TAPE_CONFIG_OPTION_KEEP_MOTOR)
     {
         // Set MOTOR CONTROL flag.
-        TSR |= XUM1541_TAP_MOTOR;
+        tape_config.TSR |= XUM1541_TAP_MOTOR;
         // Turn off motor.
         DDR_MOTOR |= (uint8_t)IO_MOTOR;
-        PORT_MOTOR &= (uint8_t)~IO_MOTOR;
+        PORT_MOTOR |= (uint8_t)IO_MOTOR;
     }
 
-    // Reset PC6/OC1A to input.
+    // Reset PB5/OC1A to input.
     DDR_WRITE &= (uint8_t)~IO_WRITE;
 
     // Timer/Counter1 Control Register A/B.
@@ -241,14 +253,15 @@ void Tape_SetBasicConfig(uint8_t CONFIG_OPTION)
 void Tape_Reset(bool whatever)
 {
     uint8_t oldSREG = SREG; // Unknown Global Interrupt Enable state.
-    cli(); // Disable interrupts.
-
+    
     StopWaitForSense = true; // Stop WaitForSense loops.
 
     // Flag tape capture/write stop.
-    if (TSR & XUM1541_TAP_CAPTURING) Tape_StopCapture();
-    if (TSR & XUM1541_TAP_WRITING)   Tape_StopWrite();
-
+    if (tape_config.TSR & XUM1541_TAP_CAPTURING) Tape_StopCapture();
+    if (tape_config.TSR & XUM1541_TAP_WRITING)   Tape_StopWrite();
+    
+    cli(); // Disable interrupts.
+    
     // Set all port pins to defined level (input/pull-up), but turn motor on port B off.
     Tape_ResetPorts();
 
@@ -284,7 +297,7 @@ uint16_t Probe4TapeDevice(void)
     scSaved_PORT_DETECT = PORT_DETECT;
     scSaved_MCUCR = MCUCR;
 
-    TSR = 0; // Clear Tape State Register.
+    tape_config.TSR = 0; // Clear Tape State Register.
 
     // Configure device disconnect detection.
     Tape_ConfigureDisconnectDetection();
@@ -315,8 +328,8 @@ void Enter_Tape_Mode(struct ProtocolFunctions ** protoFn)
     cli(); // Disable interrupts.
 
     // Set default configuration.
-    TSR |= (uint8_t)XUM1541_TAP_READ_STARTFALLEDGE;   // Start reading with falling edge.
-    TSR &= (uint8_t)~XUM1541_TAP_WRITE_STARTFALLEDGE; // Start writing with rising edge.
+    tape_config.TSR |= (uint8_t)XUM1541_TAP_READ_STARTFALLEDGE;   // Start reading with falling edge.
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_WRITE_STARTFALLEDGE; // Start writing with rising edge.
 
     // Set all port pins to defined level (input/pull-up), but turn motor on port B off.
     Tape_ResetPorts();
@@ -354,10 +367,10 @@ uint16_t Tape_MotorOn(void)
         return Tape_Status_ERROR_Device_Disconnected;
     }
 
-    TSR |= XUM1541_TAP_MOTOR; // Set MOTOR CONTROL flag.
+    tape_config.TSR |= XUM1541_TAP_MOTOR; // Set MOTOR CONTROL flag.
 
     DDR_MOTOR |= (uint8_t)IO_MOTOR;
-    PORT_MOTOR |= (uint8_t)IO_MOTOR;
+    PORT_MOTOR &= (uint8_t)~IO_MOTOR;
 
     return Tape_Status_OK_Motor_On;
 }
@@ -376,10 +389,10 @@ uint16_t Tape_MotorOff(void)
         return Tape_Status_ERROR_Device_Disconnected;
     }
 
-    TSR |= XUM1541_TAP_MOTOR; // Set MOTOR CONTROL flag.
+    tape_config.TSR |= XUM1541_TAP_MOTOR; // Set MOTOR CONTROL flag.
 
     DDR_MOTOR |= (uint8_t)IO_MOTOR;
-    PORT_MOTOR &= (uint8_t)~IO_MOTOR;
+    PORT_MOTOR |= (uint8_t)IO_MOTOR;
 
     return Tape_Status_OK_Motor_Off;
 }
@@ -432,7 +445,7 @@ INLINE void Tape_KeepOC1AonCompareMatch(void)
 //   - Tape_Status_ERROR_usbRecvByte
 uint16_t Tape_UploadConfig(void)
 {
-    uint8_t data;
+    uint8_t data[4];
     uint8_t oldSREG = SREG; // Unknown Global Interrupt Enable state.
     cli(); // Disable interrupts.
 
@@ -440,17 +453,23 @@ uint16_t Tape_UploadConfig(void)
     usbInitIo(-1, ENDPOINT_DIR_OUT);
     DELAY_MS(10);
 
-    // Get 1 configuration byte.
-    if (usbRecvByte(&data) != 0)
-    {
-        usbIoDone();
-        SREG = oldSREG; // Restore Global Interrupt Enable state.
-        return Tape_Status_ERROR_usbRecvByte;
-    }
+    // Get configuration bytes.
+    for (int i = 0; i < 4; i++) {
+        if (usbRecvByte(&data[i]) != 0)
+        {
+            usbIoDone();
+            SREG = oldSREG; // Restore Global Interrupt Enable state.
+            return Tape_Status_ERROR_usbRecvByte;
+        }        
+    }    
 
     // Store configuration to TSR.
-    TSR &= (uint8_t)~(XUM1541_TAP_READ_STARTFALLEDGE | XUM1541_TAP_WRITE_STARTFALLEDGE);
-    TSR |= (uint8_t)(data & (XUM1541_TAP_READ_STARTFALLEDGE | XUM1541_TAP_WRITE_STARTFALLEDGE));
+    tape_config.TSR &= (uint8_t)~(XUM1541_TAP_READ_STARTFALLEDGE | XUM1541_TAP_WRITE_STARTFALLEDGE);
+    tape_config.TSR |= (uint8_t)(data[0] & (XUM1541_TAP_READ_STARTFALLEDGE | XUM1541_TAP_WRITE_STARTFALLEDGE));
+
+    tape_config.auto_stop = data[1];
+    if (data[2]==0xFF)
+        Tape_SetDeviceSerial(data[3]);
 
     usbIoDone();
     SREG = oldSREG; // Restore Global Interrupt Enable state.
@@ -464,20 +483,28 @@ uint16_t Tape_UploadConfig(void)
 //   - Tape_Status_ERROR_usbSendByte
 uint16_t Tape_DownloadConfig(void)
 {
-    uint8_t data = TSR;
+    uint8_t data[4];
     uint8_t oldSREG = SREG; // Unknown Global Interrupt Enable state.
+    
+    data[0] = tape_config.TSR;
+    data[1] = tape_config.auto_stop;
+    data[2] = 0;
+    data[3] = Tape_GetDeviceSerial();
+    
     cli(); // Disable interrupts.
 
     wdt_reset(); // Feed the watchdog.
     usbInitIo(-1, ENDPOINT_DIR_IN);
     DELAY_MS(10);
 
-    // Send TSR byte.
-    if (usbSendByte(data) != 0)
-    {
-        usbIoDone();
-        SREG = oldSREG; // Restore Global Interrupt Enable state.
-        return Tape_Status_ERROR_usbSendByte;
+    // Send configuration.
+    for (int i = 0; i < 4; i++) {
+        if (usbSendByte(data[i]) != 0)
+        {
+            usbIoDone();
+            SREG = oldSREG; // Restore Global Interrupt Enable state.
+            return Tape_Status_ERROR_usbSendByte;
+        }
     }
 
     usbIoDone();
@@ -526,7 +553,7 @@ uint16_t Tape_PrepareCapture(void)
     TCCR1B |= (uint8_t)(1 << ICNC1);
 
     // Timer/Counter1 Control Register B.
-    if (TSR & XUM1541_TAP_READ_STARTFALLEDGE)
+    if (tape_config.TSR & XUM1541_TAP_READ_STARTFALLEDGE)
         TCCR1B &= (uint8_t)~(1 << ICES1); // Input Capture Edge Select: use falling edge as first trigger (0=falling edge).
     else
         TCCR1B |= (uint8_t)(1 << ICES1);  // Input Capture Edge Select: use rising edge as first trigger (1=rising edge).
@@ -543,13 +570,13 @@ uint16_t Tape_PrepareCapture(void)
     // Timer1 feeds the watchdog until tape capturing starts.
     TIMSK1 = (uint8_t)(1 << TOIE1);
 
-    // Prepare PC7/ICP1 for input capture: READ
-    DDR_READ &= (uint8_t)~IO_READ; // Switch PC7 to input.
-    PORT_READ |= (uint8_t)IO_READ; // Enable pull-up resistor on PC7.
+    // Prepare PD4/ICP1 for input capture: READ
+    DDR_READ &= (uint8_t)~IO_READ; // Switch PD4 to input.
+    PORT_READ |= (uint8_t)IO_READ; // Enable pull-up resistor on PD4.
 
-    // Prepare PB0 for input pin change: SENSE
-    DDR_SENSE &= (uint8_t)~IO_SENSE; // Switch PB0 to input.
-    PORT_SENSE |= (uint8_t)IO_SENSE; // Enable pull-up resistor on PB0/PCINT0.
+    // Prepare PB2 for input pin change: SENSE
+    DDR_SENSE &= (uint8_t)~IO_SENSE; // Switch PB2 to input.
+    PORT_SENSE |= (uint8_t)IO_SENSE; // Enable pull-up resistor on PB2/PCINT2.
     MCUCR &= (uint8_t)~(1 << PUD); // Allow pull-up resistor usage, PUD="Pull-up Disable".
     PCICR = (uint8_t)(1 << PCIE0); // Enable PCINT7..0 interrupts, PCIE0="Pin Change Interrupt Enable 0", PCICR="Pin Change Interrupt Control Register".
     PCMSK0 = 0; // Disable pin change interrupts until capture starts, PCMSK0="Pin Change Mask Register 0".
@@ -562,7 +589,7 @@ uint16_t Tape_PrepareCapture(void)
     EICRA |= (uint8_t)IN_EICRA;  // External Interrupt Sense Control: Rising edge generates interrupt request.
 
     // Clear pending interrupt flags.
-    TIFR1 = 0xff;            // Timer1 Interrupt Flag Register.
+    TIFR1 = 0xff;            // Timer1 Interrupt Flag Register.  
     PCIFR = 0xff;            // Pin Change Interrupt Flag Register.
     EIFR = (uint8_t)IN_EIFR; // External Interrupt Flag Register: Clear pending disconnect interrupt flag.
 
@@ -574,10 +601,10 @@ uint16_t Tape_PrepareCapture(void)
     }
 
     // Feed the watchdog until tape capturing starts.
-    TSR &= (uint8_t)~XUM1541_TAP_CAPTURING; // Clear tape capture in progress flag.
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_CAPTURING; // Clear tape capture in progress flag.
 
     // Device is now configured for tape read operations.
-    TSR |= (uint8_t)XUM1541_TAP_DEVICE_CONFIG_READ;
+    tape_config.TSR |= (uint8_t)XUM1541_TAP_DEVICE_CONFIG_READ;
 
     SREG = oldSREG; // Restore Global Interrupt Enable state.
     // TIMER1_OVF IRQ must be active now.
@@ -616,7 +643,7 @@ uint16_t Tape_PrepareWrite(void)
 
     // Note: WRITE signal is usually inverted READ signal.
     // Timer/Counter1 Control Register C: Force Output Compare for Channel A.
-    if (TSR & XUM1541_TAP_WRITE_STARTFALLEDGE)
+    if (tape_config.TSR & XUM1541_TAP_WRITE_STARTFALLEDGE)
         Tape_Set_OC1A_to_High_Mode(); // We start with OC1A=1 (first WRITE signal is falling/negative edge).
     else
         Tape_Set_OC1A_to_Low_Mode();  // We start with OC1A=0 (first WRITE signal is rising/positive edge).
@@ -641,12 +668,12 @@ uint16_t Tape_PrepareWrite(void)
     // Timer1 feeds the watchdog until tape write starts.
     TIMSK1 = (uint8_t)(1 << OCIE1A);
 
-    // Prepare PC6/OC1A for output: WRITE
-    DDR_WRITE |= (uint8_t)IO_WRITE;  // Switch PC6/OC1A to output.
+    // Prepare PB5/OC1A for output: WRITE
+    DDR_WRITE |= (uint8_t)IO_WRITE;  // Switch PB5/OC1A to output.
 
-    // Prepare PB0/PCINT0 for input pin change: SENSE
-    DDR_SENSE &= (uint8_t)~IO_SENSE; // Switch PB0/PCINT0 to input.
-    PORT_SENSE |= (uint8_t)IO_SENSE; // Enable pull-up resistor on PB0/PCINT0.
+    // Prepare PB2/PCINT2 for input pin change: SENSE
+    DDR_SENSE &= (uint8_t)~IO_SENSE; // Switch PB2/PCINT2 to input.
+    PORT_SENSE |= (uint8_t)IO_SENSE; // Enable pull-up resistor on PB2/PCINT2.
     MCUCR &= (uint8_t)~(1 << PUD);   // Allow pull-up resistor usage, PUD="Pull-up Disable".
     PCICR = (uint8_t)(1 << PCIE0);   // Enable PCINT7..0 interrupts, PCIE0="Pin Change Interrupt Enable 0", PCICR="Pin Change Interrupt Control Register".
     PCMSK0 = 0; // Disable pin change interrupts until capture starts, PCMSK0="Pin Change Mask Register 0".
@@ -659,7 +686,7 @@ uint16_t Tape_PrepareWrite(void)
     EICRA |= (uint8_t)IN_EICRA;  // External Interrupt Sense Control: Rising edge generates interrupt request.
 
     // Clear pending interrupt flags.
-    TIFR1 = 0xff; // Timer1 Interrupt Flag Register.
+    TIFR1 = 0xff; // Timer1 Interrupt Flag Register.  
     PCIFR = 0xff; // Pin Change Interrupt Flag Register.
     EIFR = (uint8_t)IN_EIFR; // External Interrupt Flag Register: Clear pending disconnect interrupt flag.
 
@@ -671,11 +698,11 @@ uint16_t Tape_PrepareWrite(void)
     }
 
     // Feed the watchdog until tape writing starts.
-    TSR &= (uint8_t)~XUM1541_TAP_WRITING; // Clear tape write in progress flag.
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_WRITING; // Clear tape write in progress flag.
     OCR1A = 0xBB80; // =3ms (16MHz timer).
 
     // Device is now configured for tape write operations.
-    TSR |= (uint8_t)XUM1541_TAP_DEVICE_CONFIG_WRITE;
+    tape_config.TSR |= (uint8_t)XUM1541_TAP_DEVICE_CONFIG_WRITE;
 
     SREG = oldSREG; // Restore Global Interrupt Enable state.
     // TIMER1_COMPA IRQ must be active now.
@@ -820,17 +847,17 @@ uint16_t Tape_StartCapture(void)
     TIFR1 = 0xff; // TIFR1 |= (1<<ICF1)|(1<<TOV1); // ICF1 = Timer1 Input Capture Flag, TOV1 = Timer1 Overflow Flag.
 
     // Set tape capture flag.
-    TSR |= (uint8_t)XUM1541_TAP_CAPTURING;
+    tape_config.TSR |= (uint8_t)XUM1541_TAP_CAPTURING;
 
-    // Pin Change Mask Register 0. Enable pin change interrupt on PB0: SENSE
-    PCMSK0 = (uint8_t)(1 << PCINT0);
+    // Pin Change Mask Register 0. Enable pin change interrupt on PB2: SENSE
+    PCMSK0 = (uint8_t)(1 << PCINT2);
 
     // Timer1 Interrupt Mask Register. Enable Input Capture Interrupt: READ
     // Tape SENSE is already on <PLAY> so we have a valid READ signal when enabling (->ZF 100K pull-down).
     TIMSK1 |= (uint8_t)(1 << ICIE1);
 
     // Pin Change Interrupt Flag Register. Clear pending interrupt flags.
-    PCIFR = 0xff;
+ 	PCIFR = 0xff;
 
     // Timer1 Interrupt Flag Register. Clear pending input capture interrupt flag.
     TIFR1 |= (1<<ICF1);
@@ -869,14 +896,14 @@ uint16_t Tape_StartWrite(void)
     }
 
     // Flag tape write.
-    TSR |= (uint8_t)XUM1541_TAP_WRITING;
+    tape_config.TSR |= (uint8_t)XUM1541_TAP_WRITING;
 
     // Enable device disconnect interrupt.
     EIFR = (uint8_t)IN_EIFR;    // External Interrupt Flag Register: Clear pending disconnect interrupt flag.
     EIMSK |= (uint8_t)IN_EIMSK; // External Interrupt Mask Register: enable disconnect interrupt.
 
-    // Pin Change Mask Register 0. Enable pin change interrupt on PB0: SENSE
-    PCMSK0 = (uint8_t)(1 << PCINT0);
+    // Pin Change Mask Register 0. Enable pin change interrupt on PB2: SENSE
+    PCMSK0 = (uint8_t)(1 << PCINT2);
 
     // Receive first delta (+ avoid SENSE signal noise).
     Tape_usbReceiveDelta();
@@ -905,7 +932,7 @@ uint16_t Tape_StartWrite(void)
     }
 
     // Clear pending interrupt flags.
-    TIFR1 = 0xff; // Timer1 Interrupt Flag Register.
+    TIFR1 = 0xff; // Timer1 Interrupt Flag Register.  
     PCIFR = 0xff; // Pin Change Interrupt Flag Register.
 
     // Make sure the tape is still on <RECORD>.
@@ -930,7 +957,7 @@ void Tape_StopCapture(void)
 
     // Disable our interrupts.
     TIMSK1 &= (uint8_t)~( (1 << ICIE1)|(1 << TOIE1) );
-    PCMSK0 &= (uint8_t)~(1 << PCINT0); // Pin Change Mask Register 0. Disable pin change interrupt on PB0: SENSE
+    PCMSK0 &= (uint8_t)~(1 << PCINT2); // Pin Change Mask Register 0. Disable pin change interrupt on PB2: SENSE
     EIMSK  &= (uint8_t)~IN_EIMSK;      // External Interrupt Mask Register: disable disconnect interrupt.
 
     // Clear pending interrupt flags.
@@ -939,7 +966,7 @@ void Tape_StopCapture(void)
     EIFR = (uint8_t)IN_EIFR; // External Interrupt Flag Register: Clear pending disconnect interrupt flag.
 
     // Flag tape capture stop.
-    TSR &= (uint8_t)~XUM1541_TAP_CAPTURING;
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_CAPTURING;
 }
 
 
@@ -954,7 +981,7 @@ void Tape_StopWrite(void)
     Tape_KeepOC1AonCompareMatch();
 
     // Disable our interrupts.
-    PCMSK0 &= (uint8_t)~(1 << PCINT0); // Pin Change Mask Register 0. Disable pin change interrupt on PB0: SENSE
+    PCMSK0 &= (uint8_t)~(1 << PCINT2); // Pin Change Mask Register 0. Disable pin change interrupt on PB2: SENSE
     EIMSK  &= (uint8_t)~IN_EIMSK;      // External Interrupt Mask Register: disable disconnect interrupt.
 
     // Clear pending interrupt flags.
@@ -966,7 +993,7 @@ void Tape_StopWrite(void)
     OCR1A = 0x7D00; // =2ms (16MHz timer).
 
     // Flag tape write stop.
-    TSR &= (uint8_t)~XUM1541_TAP_WRITING;
+    tape_config.TSR &= (uint8_t)~XUM1541_TAP_WRITING;
 }
 
 
@@ -1097,8 +1124,10 @@ void Tape_usbReceiveDelta(void)
 // Only active while actually reading or writing.
 ISR(PCINT0_vect)
 {
-    if (TSR & XUM1541_TAP_CAPTURING) Tape_StopCapture();
-    if (TSR & XUM1541_TAP_WRITING)
+    if ((tape_config.TSR & XUM1541_TAP_CAPTURING) && (tape_config.auto_stop))
+        Tape_StopCapture();
+        
+    if (tape_config.TSR & XUM1541_TAP_WRITING)
     {
         Tape_StopWrite();
         TapeStatus = Tape_Status_ERROR_Write_Interrupted_By_Stop;
@@ -1113,8 +1142,8 @@ ISR(INT0_vect)
     EIMSK &= (uint8_t)~IN_EIMSK; // External Interrupt Mask Register: disable disconnect interrupt.
     EIFR = (uint8_t)IN_EIFR;     // External Interrupt Flag Register: Clear pending disconnect interrupt flag.
 
-    if (TSR & XUM1541_TAP_CAPTURING) Tape_StopCapture();
-    if (TSR & XUM1541_TAP_WRITING)   Tape_StopWrite();
+    if (tape_config.TSR & XUM1541_TAP_CAPTURING) Tape_StopCapture();
+    if (tape_config.TSR & XUM1541_TAP_WRITING)   Tape_StopWrite();
 
 #ifndef DeviceHotPlugAllowed
     // Remember tape device was disconnected.
@@ -1126,7 +1155,7 @@ ISR(INT0_vect)
 }
 
 
-// Timer1 capture event: PC7/ICP1.
+// Timer1 capture event: PD4/ICP1.
 ISR(TIMER1_CAPT_vect)
 {
     Tape_Timer1Stamp = ICR1;         // Save ICR1 timestamp.
@@ -1151,18 +1180,18 @@ ISR(TIMER1_CAPT_vect)
 // Feed watchdog when no tape capture in progress.
 ISR(TIMER1_OVF_vect)
 {
-    if (TSR & XUM1541_TAP_CAPTURING)
+    if (tape_config.TSR & XUM1541_TAP_CAPTURING)
         Tape_Timer1Ovf++; // Timer1 overflow counter.
     else
         wdt_reset(); // Feed the watchdog when not capturing.
 }
 
 
-// Timer1 OCR1A compare match: handle WRITE pin PC6/OC1A.
+// Timer1 OCR1A compare match: handle WRITE pin PB5/OC1A.
 // Feed watchdog when no tape writing in progress.
 ISR(TIMER1_COMPA_vect)
 {
-    if ((TSR & XUM1541_TAP_WRITING) == 0)
+    if ((tape_config.TSR & XUM1541_TAP_WRITING) == 0)
     {
         wdt_reset(); // Feed the watchdog when not writing.
     }
@@ -1246,7 +1275,7 @@ uint16_t Tape_Capture(void)
 
     sei(); // Enable interrupts for tape capture.
 
-    while (TSR & XUM1541_TAP_CAPTURING)
+    while (tape_config.TSR & XUM1541_TAP_CAPTURING)
         wdt_reset(); // Feed the watchdog while capturing.
 
     Set_usbDataLen(0);
@@ -1297,7 +1326,7 @@ uint16_t Tape_Write(void)
 
     sei(); // Enable interrupts for tape write.
 
-    while (TSR & XUM1541_TAP_WRITING)
+    while (tape_config.TSR & XUM1541_TAP_WRITING)
         wdt_reset(); // Feed the watchdog while writing.
 
     Set_usbDataLen(0);

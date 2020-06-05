@@ -57,6 +57,7 @@ static struct XumDevice validDeviceTypes[] = {
     { "TEENSY2",       "atmega32u4" },
     { "PROMICRO",      "atmega32u4" },
     { "PROMICRO_7406", "atmega32u4" },
+    { "PROMICRO_TAPE", "atmega32u4" },
     { NULL,            NULL }
 };
 #define NO_OF_DEVICE_TYPES (sizeof(validDeviceTypes) / sizeof(struct XumDevice) - 1)
