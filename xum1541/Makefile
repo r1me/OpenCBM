@@ -20,7 +20,7 @@
 # PROMICRO: Arduino Pro Micro USB Development Board with 16 MHz ATMEGA32U4 cpu
 # PROMICRO_7406: Arduino Pro Micro USB Development Board with 16 MHz ATMEGA32U4 with a 7406
 
-MODELS= USBKEY ZOOMFLOPPY BUMBLEB OLIMEX TEENSY2 PROMICRO PROMICRO_7406
+MODELS= USBKEY ZOOMFLOPPY BUMBLEB OLIMEX TEENSY2 PROMICRO PROMICRO_7406 PROMICRO_TAPE
 .PHONY: $(MODELS)
 
 # Enable to get debug printing via the UART (port D)
@@ -75,6 +75,11 @@ CPUMODEL=	atmega32u4
 CPURATE=	16000000
 BOARD=		BOARD_PROMICRO_7406
 BOARD_OBJS=	board-promicro_7406.o
+else ifeq ($(MODEL),PROMICRO_TAPE)
+CPUMODEL=	atmega32u4
+CPURATE=	16000000
+BOARD=		BOARD_PROMICRO_TAPE
+BOARD_OBJS=	board-promicro_tape.o
 endif
 
 # Final name for firmware hex file
@@ -113,7 +118,11 @@ MYUSB_OBJS= \
         LUFA/Drivers/USB/HighLevel/USBTask.o \
         LUFA/Drivers/USB/HighLevel/USBInterrupt.o
 
+ifeq ($(MODEL),PROMICRO_TAPE)
+IEC_OBJS= 
+else
 IEC_OBJS= iec.o s1.o s2.o pp.o p2.o nib.o
+endif
 
 OBJS=   $(addprefix obj/$(MODEL)/,              \
         main.o commands.o descriptor.o          \
