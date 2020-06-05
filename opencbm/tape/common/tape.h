@@ -34,9 +34,18 @@
 // Signal edge definitions.
 #define XUM1541_TAP_WRITE_STARTFALLEDGE 0x20 // start writing with falling edge (1 = true)
 #define XUM1541_TAP_READ_STARTFALLEDGE  0x40 // start reading with falling edge (1 = true)
+#define XUM1541_TAP_STOP_ON_SENSE       0x01 // stop capture/write if STOP was pressed (1 = true)
 
 // Tape/disk mode error return values for xum1541_ioctl, xum1541_read, xum1541_write.
 #define XUM1541_Error_NoTapeSupport      -100
 #define XUM1541_Error_NoDiskTapeMode     -101
 #define XUM1541_Error_TapeCmdInDiskMode  -102
 #define XUM1541_Error_DiskCmdInTapeMode  -103
+
+typedef struct
+{
+	unsigned __int8 TSR;
+	unsigned __int8 auto_stop;
+    unsigned __int8 write_serial;
+    unsigned __int8 device_serial;
+} tape_config_t;

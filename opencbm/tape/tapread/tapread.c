@@ -342,7 +342,7 @@ __int32 WriteTapeBufferToCaptureFile(HANDLE hCAP, unsigned __int8 *pucTapeBuffer
 
 __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBufferSize, __int32 *piCaptureLen)
 {
-    unsigned __int8 ReadConfig, ReadConfig2;
+    tape_config_t ReadConfig, ReadConfig2;
     __int32         Status, BytesRead, BytesWritten, FuncRes;
 
     // Check abort flag.
@@ -378,9 +378,12 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
 
     // Prepare tape read configuration.
     if (CAP_StartEdge == CAP_StartEdge_Falling)
-        ReadConfig = (unsigned __int8)XUM1541_TAP_READ_STARTFALLEDGE; // Start reading with falling edge.
+        ReadConfig.TSR = (unsigned __int8)XUM1541_TAP_READ_STARTFALLEDGE; // Start reading with falling edge.
     else
-        ReadConfig = ~(unsigned __int8)XUM1541_TAP_READ_STARTFALLEDGE; // Start reading with rising edge.
+        ReadConfig.TSR = ~(unsigned __int8)XUM1541_TAP_READ_STARTFALLEDGE; // Start reading with rising edge.
+    ReadConfig.auto_stop = (unsigned __int8)XUM1541_TAP_STOP_ON_SENSE;
+    ReadConfig.write_serial = 0;
+    ReadConfig.device_serial = 0;
 
     // Check abort flag.
     if (AbortTapeOps)
@@ -394,7 +397,7 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
     //   - XUM1541_Error_NoTapeSupport
     //   - XUM1541_Error_NoDiskTapeMode
     //   - XUM1541_Error_TapeCmdInDiskMode
-    FuncRes = cbm_tap_upload_config(fd, &ReadConfig, 1, &Status, &BytesWritten);
+    FuncRes = cbm_tap_upload_config(fd, (unsigned char *)&ReadConfig, 4, &Status, &BytesWritten);
     if (FuncRes < 0)
     {
         printf("\nReturned error [upload_config]: ");
@@ -409,7 +412,7 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
             printf("%d\n", Status);
         return -1;
     }
-    if (BytesWritten != 1)
+    if (BytesWritten != 4)
     {
         printf("\nError [upload_config]: Invalid data size (%d).\n", BytesWritten);
         return -1;
@@ -427,7 +430,7 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
     //   - XUM1541_Error_NoTapeSupport
     //   - XUM1541_Error_NoDiskTapeMode
     //   - XUM1541_Error_TapeCmdInDiskMode
-    FuncRes = cbm_tap_download_config(fd, &ReadConfig2, 1, &Status, &BytesRead);
+    FuncRes = cbm_tap_download_config(fd, (unsigned char *)&ReadConfig2, 4, &Status, &BytesRead);
     if (FuncRes < 0)
     {
         printf("\nReturned error [download_config]: ");
@@ -442,12 +445,12 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
             printf("%d\n", Status);
         return -1;
     }
-    if (BytesRead != 1)
+    if (BytesRead != 4)
     {
         printf("\nError [download_config]: Invalid data size (%d).\n", BytesRead);
         return -1;
     }
-    if ((ReadConfig & 0x60) != (ReadConfig2 & 0x60))
+    if ((ReadConfig.TSR & 0x60) != (ReadConfig2.TSR & 0x60))
     {
         printf("\nError [download_config]: Configuration mismatch.\n");
         return -1;
@@ -586,7 +589,7 @@ __int32 CaptureTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, __int32 iTapeBu
     //   - XUM1541_Error_NoTapeSupport
     //   - XUM1541_Error_NoDiskTapeMode
     //   - XUM1541_Error_TapeCmdInDiskMode
-    FuncRes = cbm_tap_start_capture(fd, pucTapeBuffer, iTapeBufferSize, &Status, &BytesRead);
+    FuncRes = cbm_tap_start_capture(fd, pucTapeBuffer, iTapeBufferSize, &Status, &BytesRead, NULL);
     if (FuncRes < 0)
     {
         printf("\nReturned error [capture]: ");
@@ -742,7 +745,7 @@ int ARCH_MAINDECL main(int argc, char *argv[])
     exit:
     DeleteCriticalSection(&CritSec_fd);
     DeleteCriticalSection(&CritSec_BreakHandler);
-    if (pucTapeBuffer != NULL) free(pucTapeBuffer);
-    printf("\n");
-    return RetVal;
+       if (pucTapeBuffer != NULL) free(pucTapeBuffer);
+       printf("\n");
+       return RetVal;
 }
