@@ -5,4 +5,6 @@ DIRS= \
 	tapview  \
 	cap2tap  \
 	tap2cap  \
-	tapcontrol
+	tapcontrol \
+	tapcap
+
