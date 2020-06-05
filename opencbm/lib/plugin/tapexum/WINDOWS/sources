@@ -18,7 +18,6 @@ C_DEFINES=$(C_DEFINES) -DHAVE_LIBUSB0=0 -DHAVE_LIBUSB1=1 -DHAVE_LIBUSB_1_0=1
 
 SOURCES=../archlib.c \
 	../xum1541.c \
-	../s1_s2_pp.c \
 	../parburst.c \
 	dllmain.c \
 	opencbm-xum1541.rc

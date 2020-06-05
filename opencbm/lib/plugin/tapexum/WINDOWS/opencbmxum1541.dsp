@@ -112,14 +112,6 @@ SOURCE=.\dllmain.c
 # End Source File
 # Begin Source File
 
-SOURCE=.\install.c
-# End Source File
-# Begin Source File
-
-SOURCE=..\s1_s2_pp.c
-# End Source File
-# Begin Source File
-
 SOURCE=..\xum1541.c
 # End Source File
 # End Group

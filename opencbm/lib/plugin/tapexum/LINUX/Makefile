@@ -5,7 +5,7 @@ include ${RELATIVEPATH}LINUX/config.make
 
 PLUGIN_NAME = xum1541
 LIBNAME = libopencbm-${PLUGIN_NAME}
-SRCS    = archlib.c xum1541.c s1_s2_pp.c parburst.c
+SRCS    = archlib.c xum1541.c parburst.c
 LIBS    = -L$(RELATIVEPATH)/libmisc -lmisc
 LIBS   += $(LIBUSB_LIBS)
 
