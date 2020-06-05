@@ -2244,14 +2244,14 @@ cbm_tap_motor_off(CBM_FILE HandleDevice, int *Status)
 */
 
 int CBMAPIDECL
-cbm_tap_start_capture(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead)
+cbm_tap_start_capture(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead, cbm_tap_capture_callback_t ReadCallback)
 {
     int ret = -1;
 
     FUNC_ENTER();
 
     if (Plugin_information.Plugin.opencbm_plugin_tap_start_capture)
-        ret = Plugin_information.Plugin.opencbm_plugin_tap_start_capture(HandleDevice, Buffer, Buffer_Length, Status, BytesRead);
+        ret = Plugin_information.Plugin.opencbm_plugin_tap_start_capture(HandleDevice, Buffer, Buffer_Length, Status, BytesRead, ReadCallback);
 
     FUNC_LEAVE_INT(ret);
 }

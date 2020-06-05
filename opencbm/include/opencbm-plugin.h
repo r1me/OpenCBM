@@ -335,7 +335,7 @@ typedef int CBMAPIDECL opencbm_plugin_tap_wait_for_stop_sense_t(CBM_FILE HandleD
 typedef int CBMAPIDECL opencbm_plugin_tap_wait_for_play_sense_t(CBM_FILE HandleDevice, int *Status);
 typedef int CBMAPIDECL opencbm_plugin_tap_motor_on_t(CBM_FILE HandleDevice, int *Status);
 typedef int CBMAPIDECL opencbm_plugin_tap_motor_off_t(CBM_FILE HandleDevice, int *Status);
-typedef int CBMAPIDECL opencbm_plugin_tap_start_capture_t(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead);
+typedef int CBMAPIDECL opencbm_plugin_tap_start_capture_t(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead, cbm_tap_capture_callback_t ReadCallback);
 typedef int CBMAPIDECL opencbm_plugin_tap_start_write_t(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten);
 typedef int CBMAPIDECL opencbm_plugin_tap_get_ver_t(CBM_FILE HandleDevice, int *Status);
 typedef int CBMAPIDECL opencbm_plugin_tap_download_config_t(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead);
