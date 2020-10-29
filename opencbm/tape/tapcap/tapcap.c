@@ -891,4 +891,180 @@ EXTERN int CBMAPIDECL cap_file_to_tap_file(unsigned char *cap_file_name, unsigne
     return RetVal;
 }
 
+// Create (overwrite) an image file for writing.
+EXTERN int CBMAPIDECL cap_file_CreateFile(HANDLE *hHandle, char *pcFilename)
+{
+    return CAP_CreateFile(hHandle, pcFilename);
+}
 
+// Open an existing image file for reading.
+EXTERN int CBMAPIDECL cap_file_OpenFile(HANDLE *hHandle, char *pcFilename)
+{
+    return CAP_OpenFile(hHandle, pcFilename);
+}
+
+// Close an image file.
+EXTERN int CBMAPIDECL cap_file_CloseFile(HANDLE *hHandle)
+{
+    return CAP_CloseFile(hHandle);
+}
+
+// Check if a file is already existing.
+EXTERN int CBMAPIDECL cap_file_isFilePresent(char *pcFilename)
+{
+    return CAP_isFilePresent(pcFilename);
+}
+
+// Return file size of image file (moves file pointer).
+EXTERN int CBMAPIDECL cap_file_GetFileSize(HANDLE hHandle, int *piFileSize)
+{
+    return CAP_GetFileSize(hHandle, piFileSize);
+}
+
+// Seek to start of image file and read image header, extract & verify header contents, seek to start of image data.
+EXTERN int CBMAPIDECL cap_file_ReadHeader(HANDLE hHandle)
+{
+    return CAP_ReadHeader(hHandle);
+}
+
+// Seek to start of file & write image header.
+EXTERN int CBMAPIDECL cap_file_WriteHeader(HANDLE hHandle)
+{
+    return CAP_WriteHeader(hHandle);
+}
+
+// Write addon string after image header.
+EXTERN int CBMAPIDECL cap_file_WriteHeaderAddon(HANDLE hHandle, unsigned char *pucString, unsigned int uiStringLen)
+{
+    return CAP_WriteHeaderAddon(hHandle, pucString, uiStringLen);
+}
+
+// Read a signal from image, increment byte counter.
+EXTERN int CBMAPIDECL cap_file_ReadSignal(HANDLE hHandle, unsigned __int64 *pui64Signal, int *piCounter)
+{
+    return CAP_ReadSignal(hHandle, pui64Signal, piCounter);
+}
+
+// Write a signal to image, increment counter for each written byte.
+EXTERN int CBMAPIDECL cap_file_WriteSignal(HANDLE hHandle, unsigned __int64 ui64Signal, int *piCounter)
+{
+    return CAP_WriteSignal(hHandle, ui64Signal, piCounter);
+}
+
+// Verify header contents (Signature, Version, Precision, Machine, Video, StartEdge, SignalFormat, SignalWidth, StartOfs).
+EXTERN int CBMAPIDECL cap_file_isValidHeader(HANDLE hHandle)
+{
+    return CAP_isValidHeader(hHandle);
+}
+
+// Get all header entries at once.
+EXTERN int CBMAPIDECL cap_file_GetHeader(HANDLE        hHandle,
+                                         unsigned int  *puiPrecision,
+                                         unsigned char *pucMachine,
+                                         unsigned char *pucVideo,
+                                         unsigned char *pucStartEdge,
+                                         unsigned char *pucSignalFormat,
+                                         unsigned int  *puiSignalWidth,
+                                         unsigned int  *puiStartOffset)
+{
+    return CAP_GetHeader(hHandle, puiPrecision, pucMachine, pucVideo, pucStartEdge, pucSignalFormat, puiSignalWidth, puiStartOffset);
+}
+
+// Set all header entries at once.
+EXTERN int CBMAPIDECL cap_file_SetHeader(HANDLE        hHandle,
+                                         unsigned int  uiPrecision,
+                                         unsigned char ucMachine,
+                                         unsigned char ucVideo,
+                                         unsigned char ucStartEdge,
+                                         unsigned char ucSignalFormat,
+                                         unsigned int  uiSignalWidth,
+                                         unsigned int  uiStartOffset)
+{
+    return CAP_SetHeader(hHandle, uiPrecision, ucMachine, ucVideo, ucStartEdge, ucSignalFormat, uiSignalWidth, uiStartOffset);
+}
+
+// Create (overwrite) an image file for writing.
+EXTERN int CBMAPIDECL tap_file_CreateFile(HANDLE *hHandle, char *pcFilename)
+{
+    return TAP_CBM_CreateFile(hHandle, pcFilename);
+}
+
+// Open an existing image file for reading.
+EXTERN int CBMAPIDECL tap_file_OpenFile(HANDLE *hHandle, char *pcFilename)
+{
+    return TAP_CBM_OpenFile(hHandle, pcFilename);
+}
+
+// Close an image file.
+EXTERN int CBMAPIDECL tap_file_CloseFile(HANDLE *hHandle)
+{
+    return TAP_CBM_CloseFile(hHandle);
+}
+
+// Check if a file is already existing.
+EXTERN int CBMAPIDECL tap_file_isFilePresent(char *pcFilename)
+{
+    return  TAP_CBM_isFilePresent(pcFilename);
+}
+
+// Return file size of image file (moves file pointer).
+EXTERN int CBMAPIDECL tap_file_GetFileSize(HANDLE hHandle, int *piFileSize)
+{
+    return TAP_CBM_GetFileSize(hHandle, piFileSize);
+}
+
+// Seek to start of image file and read image header, extract & verify header contents.
+EXTERN int CBMAPIDECL tap_file_ReadHeader(HANDLE hHandle)
+{
+    return TAP_CBM_ReadHeader(hHandle);
+}
+
+// Seek to start of file & write image header.
+EXTERN int CBMAPIDECL tap_file_WriteHeader(HANDLE hHandle)
+{
+    return TAP_CBM_WriteHeader(hHandle);
+}
+
+// Read a signal from image, increment counter for each read byte.
+EXTERN int CBMAPIDECL tap_file_ReadSignal(HANDLE hHandle, unsigned int *puiSignal, unsigned int *puiCounter)
+{
+    return TAP_CBM_ReadSignal(hHandle, puiSignal, puiCounter);
+}
+
+// Write a single unsigned char to image file.
+EXTERN int CBMAPIDECL tap_file_WriteSignal_1Byte(HANDLE hHandle, unsigned char ucByte, unsigned int *puiCounter)
+{
+    return TAP_CBM_WriteSignal_1Byte(hHandle, ucByte, puiCounter);
+}
+
+// Write 32bit unsigned integer to image file: LSB first, MSB last.
+EXTERN int CBMAPIDECL tap_file_WriteSignal_4Bytes(HANDLE hHandle, unsigned int uiSignal, unsigned int *puiCounter)
+{
+    return TAP_CBM_WriteSignal_4Bytes(hHandle, uiSignal, puiCounter);
+}
+
+// Verify header contents (Signature, Machine, Video, TAPversion).
+EXTERN int CBMAPIDECL tap_file_isValidHeader(HANDLE hHandle)
+{
+    return TAP_CBM_isValidHeader(hHandle);
+}
+
+// Get all header entries at once.
+EXTERN int CBMAPIDECL tap_file_GetHeader(HANDLE        hHandle,
+                                         unsigned char *pucMachine,
+                                         unsigned char *pucVideo,
+                                         unsigned char *pucTAPversion,
+                                         unsigned int  *puiByteCount)
+{
+    return TAP_CBM_GetHeader(hHandle, pucMachine, pucVideo, pucTAPversion, puiByteCount);
+}
+
+// Set all header entries at once.
+EXTERN int CBMAPIDECL tap_file_SetHeader(HANDLE        hHandle,
+                                         unsigned char ucMachine,
+                                         unsigned char ucVideo,
+                                         unsigned char ucTAPversion,
+                                         unsigned int  uiByteCount)
+{
+    return TAP_CBM_SetHeader(hHandle, ucMachine, ucVideo, ucTAPversion, uiByteCount);
+}
