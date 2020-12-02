@@ -578,7 +578,7 @@ __int32 WriteTape(CBM_FILE fd, unsigned __int8 *pucTapeBuffer, unsigned __int32 
     //   - XUM1541_Error_NoTapeSupport
     //   - XUM1541_Error_NoDiskTapeMode
     //   - XUM1541_Error_TapeCmdInDiskMode
-    FuncRes = cbm_tap_start_write(fd, pucTapeBuffer, uiCaptureLen, &Status, &BytesWritten);
+    FuncRes = cbm_tap_start_write(fd, pucTapeBuffer, uiCaptureLen, &Status, &BytesWritten, NULL);
     if (FuncRes < 0)
     {
         printf("\nReturned error [write]: ");

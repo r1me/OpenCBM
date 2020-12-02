@@ -2293,14 +2293,14 @@ cbm_tap_start_capture(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int
 */
 
 int CBMAPIDECL
-cbm_tap_start_write(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten)
+cbm_tap_start_write(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten, cbm_tap_write_callback_t WriteCallback)
 {
     int ret = -1;
 
     FUNC_ENTER();
 
     if (Plugin_information.Plugin.opencbm_plugin_tap_start_write)
-        ret = Plugin_information.Plugin.opencbm_plugin_tap_start_write(HandleDevice, Buffer, Length, Status, BytesWritten);
+        ret = Plugin_information.Plugin.opencbm_plugin_tap_start_write(HandleDevice, Buffer, Length, Status, BytesWritten, WriteCallback);
 
     FUNC_LEAVE_INT(ret);
 }

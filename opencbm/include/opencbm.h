@@ -236,6 +236,7 @@ EXTERN int CBMAPIDECL cbm_srq_burst_write_track(CBM_FILE f, unsigned char *buffe
 /* functions specifically for CBM 153x tape drive */
 
 typedef void(*cbm_tap_capture_callback_t)(unsigned char *Buffer, unsigned int Buffer_Length);
+typedef void(*cbm_tap_write_callback_t)(unsigned int Buffer_Position, unsigned int Buffer_Length);
 
 EXTERN int CBMAPIDECL cbm_tap_prepare_capture(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_prepare_write(CBM_FILE f, int *Status);
@@ -243,7 +244,7 @@ EXTERN int CBMAPIDECL cbm_tap_get_sense(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_wait_for_stop_sense(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_wait_for_play_sense(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_start_capture(CBM_FILE f, unsigned char *Buffer, unsigned int Buffer_Length, int *Status, int *BytesRead, cbm_tap_capture_callback_t ReadCallback);
-EXTERN int CBMAPIDECL cbm_tap_start_write(CBM_FILE f, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten);
+EXTERN int CBMAPIDECL cbm_tap_start_write(CBM_FILE f, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten, cbm_tap_write_callback_t WriteCallback);
 EXTERN int CBMAPIDECL cbm_tap_motor_on(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_motor_off(CBM_FILE f, int *Status);
 EXTERN int CBMAPIDECL cbm_tap_get_ver(CBM_FILE f, int *Status);

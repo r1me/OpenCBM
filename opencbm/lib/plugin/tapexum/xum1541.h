@@ -59,8 +59,12 @@ int xum1541_ioctl(struct opencbm_usb_handle *HandleXum1541, unsigned int cmd,
 // Read/write data in normal CBM and speeder protocol modes
 int xum1541_write(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,
     const unsigned char *data, size_t size);
+int xum1541_write_cb(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,
+    const unsigned char *data, size_t size, cbm_tap_write_callback_t WriteCallback);
 int xum1541_write_ext(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,
     const unsigned char *data, size_t size, int *Status, int *BytesWritten);
+int xum1541_write_ext_cb(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,
+    const unsigned char *data, size_t size, int *Status, int *BytesWritten, cbm_tap_write_callback_t WriteCallback);    
 int xum1541_read(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,
     unsigned char *data, size_t size);
 int xum1541_read_cb(struct opencbm_usb_handle *HandleXum1541, unsigned char mode,

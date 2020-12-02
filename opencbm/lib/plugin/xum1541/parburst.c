@@ -595,7 +595,7 @@ opencbm_plugin_tap_start_capture(CBM_FILE HandleDevice, unsigned char *Buffer, u
 */
 
 int CBMAPIDECL
-opencbm_plugin_tap_start_write(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten)
+opencbm_plugin_tap_start_write(CBM_FILE HandleDevice, unsigned char *Buffer, unsigned int Length, int *Status, int *BytesWritten, cbm_tap_write_callback_t WriteCallback)
 {
     int result = xum1541_write_ext((struct opencbm_usb_handle *)HandleDevice, XUM1541_TAP, Buffer, Length, Status, BytesWritten);
     if (result <= 0) {

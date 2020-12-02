@@ -1034,6 +1034,147 @@ xum1541_write(struct opencbm_usb_handle *HandleXum1541, unsigned char modeFlags,
     return bytesWritten;
 }
 
+/*! \brief Write data to the xum1541 device
+
+ \param HandleXum1541
+   A XUM1541_HANDLE which contains the file handle of the USB device.
+
+ \param mode
+    Drive protocol to use to read the data from the device (e.g,
+    XUM1541_CBM is normal IEC wire protocol).
+
+ \param data
+    Pointer to buffer which contains the data to be written to the xum1541
+
+ \param size
+    The number of bytes to write to the xum1541
+
+ \param WriteCallback
+
+ \return
+    The number of bytes actually written, 0 on device error. If there is a
+    fatal error, returns -1.
+*/
+int
+xum1541_write_cb(struct opencbm_usb_handle *HandleXum1541, unsigned char modeFlags, const unsigned char *data, size_t size, cbm_tap_write_callback_t WriteCallback)
+{
+    int wr, mode, ret=0;
+    size_t bytesWritten, bytes2write, maxbytes2write;
+    unsigned char cmdBuf[XUM_CMDBUF_SIZE];
+    BOOL isTapeCmd = ((modeFlags == XUM1541_TAP) || (modeFlags == XUM1541_TAP_CONFIG));
+
+    mode = modeFlags & 0xf0;
+    xum1541_dbg(1, "write %d %d bytes from address %p flags %x",
+        mode, size, data, modeFlags & 0x0f);
+
+    RefuseToWorkInWrongMode; // Check if command allowed in current disk/tape mode.
+
+    // Send the write command
+    cmdBuf[0] = XUM1541_WRITE;
+    cmdBuf[1] = modeFlags;
+    cmdBuf[2] = size & 0xff;
+    cmdBuf[3] = (size >> 8) & 0xff;
+#if HAVE_LIBUSB0
+    wr = usb.bulk_write(HandleXum1541->devh,
+        XUM_BULK_OUT_ENDPOINT | USB_ENDPOINT_OUT,
+        (char *)cmdBuf, sizeof(cmdBuf), LIBUSB_NO_TIMEOUT);
+#elif HAVE_LIBUSB1
+    ret = usb.bulk_transfer(HandleXum1541->devh,
+        XUM_BULK_OUT_ENDPOINT | LIBUSB_ENDPOINT_OUT,
+        cmdBuf, sizeof(cmdBuf), &wr, LIBUSB_NO_TIMEOUT);
+#endif
+
+#if HAVE_LIBUSB0
+    if (wr < 0) {
+#elif HAVE_LIBUSB1
+    if (ret != LIBUSB_SUCCESS) {
+#endif
+        fprintf(stderr, "USB error in write cmd: %s\n",
+            usb.error_name(ret));
+        return -1;
+    }
+
+    bytesWritten = 0;
+    while (bytesWritten < size) {
+        bytes2write = size - bytesWritten;
+        maxbytes2write = XUM_MAX_XFER_SIZE;
+        if (mode == XUM1541_TAP)
+          maxbytes2write = 512;
+        if (bytes2write > maxbytes2write)
+            bytes2write = maxbytes2write;            
+            
+#if HAVE_LIBUSB0
+        wr = usb.bulk_write(HandleXum1541->devh,
+            XUM_BULK_OUT_ENDPOINT | USB_ENDPOINT_OUT,
+            (char *)data, bytes2write, LIBUSB_NO_TIMEOUT);
+#elif HAVE_LIBUSB1
+        wr = 0;
+        ret = usb.bulk_transfer(HandleXum1541->devh,
+            XUM_BULK_OUT_ENDPOINT | LIBUSB_ENDPOINT_OUT,
+            (unsigned char *)data, bytes2write, &wr, LIBUSB_NO_TIMEOUT);
+#endif
+
+#if HAVE_LIBUSB0
+        if (wr < 0) {
+#elif HAVE_LIBUSB1
+        if (ret != LIBUSB_SUCCESS) {
+#endif
+            if (isTapeCmd)
+            {
+#if HAVE_LIBUSB0
+                if (usb.resetep(HandleXum1541->devh, XUM_BULK_OUT_ENDPOINT | USB_ENDPOINT_OUT) < 0) {
+#elif HAVE_LIBUSB1
+                ret = usb.clear_halt(HandleXum1541->devh, XUM_BULK_OUT_ENDPOINT | LIBUSB_ENDPOINT_OUT);
+                if (ret < 0) {
+#endif
+                    fprintf(stderr, "USB reset ep request failed for out ep (tape stall): %s\n", usb.error_name(ret));
+                }
+#if HAVE_LIBUSB0
+                if (usb.control_msg(HandleXum1541->devh, USB_RECIP_ENDPOINT, USB_REQ_CLEAR_FEATURE, 0, XUM_BULK_OUT_ENDPOINT, NULL, 0, USB_TIMEOUT) < 0) {
+#elif HAVE_LIBUSB1
+                ret = usb.control_transfer(HandleXum1541->devh, LIBUSB_RECIPIENT_ENDPOINT, LIBUSB_REQUEST_CLEAR_FEATURE, 0, XUM_BULK_OUT_ENDPOINT, NULL, 0, USB_TIMEOUT); /** \todo */
+                if (ret < 0) {
+
+#endif
+                    fprintf(stderr, "USB error in xum1541_control_msg (tape stall): %s\n", usb.error_name(ret));
+                }
+                return bytesWritten;
+            }
+            fprintf(stderr, "USB error in write data: %s\n",
+                usb.error_name(ret));
+            return -1;
+        }
+
+        xum1541_print_data(2, "wrote", data, wr);
+
+        data += wr;
+        bytesWritten += wr;
+        
+        if ((mode == XUM1541_TAP) && (WriteCallback != NULL))
+          WriteCallback(bytesWritten, size);
+
+        /*
+         * If we wrote less than we requested (or 0), the transfer is done
+         * even if we had more data to write still.
+         */
+        if (wr < (int)bytes2write)
+            break;
+    }
+
+    // If this is the CBM protocol, wait for the status message.
+    if (mode == XUM1541_CBM) {
+        ret = xum1541_wait_status(HandleXum1541);
+        if (ret >= 0)
+            xum1541_dbg(2, "wait done, extended status %d", ret);
+        else
+            xum1541_dbg(2, "wait done with error");
+        bytesWritten = ret;
+    }
+
+    xum1541_dbg(2, "write done, got %d bytes", bytesWritten);
+    return bytesWritten;
+}
+
 /*! \brief Wrapper for xum1541_write() forcing xum1541_wait_status(), with additional parameters:
 
  \param Status
@@ -1052,6 +1193,34 @@ xum1541_write_ext(struct opencbm_usb_handle *HandleXum1541, unsigned char modeFl
 {
     xum1541_dbg(1, "[xum1541_write_ext]");
     *BytesWritten = xum1541_write(HandleXum1541, modeFlags, data, size);
+    if (*BytesWritten < 0)
+        return *BytesWritten;
+    xum1541_dbg(2, "[xum1541_write_ext] BytesWritten = %d", *BytesWritten);
+    *Status = xum1541_wait_status(HandleXum1541);
+    xum1541_dbg(2, "[xum1541_write_ext] Status = %d", *Status);
+    return 1;
+}
+
+/*! \brief Wrapper for xum1541_write() forcing xum1541_wait_status(), with additional parameters:
+
+ \param Status
+   The return status.
+
+ \param BytesWritten
+   The number of bytes written.
+   
+ \param WriteCallback
+
+ \return
+     1 : Finished successfully.
+    <0 : Fatal error.
+*/
+
+int
+xum1541_write_ext_cb(struct opencbm_usb_handle *HandleXum1541, unsigned char modeFlags, const unsigned char *data, size_t size, int *Status, int *BytesWritten, cbm_tap_write_callback_t WriteCallback)
+{
+    xum1541_dbg(1, "[xum1541_write_ext]");
+    *BytesWritten = xum1541_write_cb(HandleXum1541, modeFlags, data, size, WriteCallback);
     if (*BytesWritten < 0)
         return *BytesWritten;
     xum1541_dbg(2, "[xum1541_write_ext] BytesWritten = %d", *BytesWritten);
