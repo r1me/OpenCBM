@@ -5,6 +5,8 @@
 
 #include "xum1541.h"
 #include "tape.h"
+#include "board-promicro_tape.h"
+#include <util/atomic.h>
 
 #ifdef TAPE_SUPPORT
 
@@ -1262,9 +1264,8 @@ uint16_t Tape_Capture(void)
     cli(); // Disable interrupts.
 
     wdt_reset(); // Feed the watchdog.
-    usbInitIo(-1, ENDPOINT_DIR_IN);
-    DELAY_MS(10);
-    DELAY_MS(30); // Avoid SENSE signal noise.
+    usbInitIo(-1, ENDPOINT_DIR_IN); 
+    DELAY_MS(130); // Avoid SENSE signal noise.
 
     //   Return values:
     //   - Tape_Status_OK
@@ -1274,6 +1275,11 @@ uint16_t Tape_Capture(void)
     TapeStatus = Tape_StartCapture(); // Start actual tape capture.
 
     sei(); // Enable interrupts for tape capture.
+
+    ATOMIC_BLOCK(ATOMIC_FORCEON)
+    {
+        TIMER1_CAPT_vect();
+    }
 
     while (tape_config.TSR & XUM1541_TAP_CAPTURING)
         wdt_reset(); // Feed the watchdog while capturing.
@@ -1307,6 +1313,8 @@ uint16_t Tape_Write(void)
 
     wdt_reset(); // Feed the watchdog.
     usbInitIo(-1, ENDPOINT_DIR_OUT);
+    DELAY_MS(90);
+    DELAY_MS(30);
     DELAY_MS(10);
 
     // Get number of delta bytes.
