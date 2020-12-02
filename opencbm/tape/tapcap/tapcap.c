@@ -891,6 +891,204 @@ EXTERN int CBMAPIDECL cap_file_to_tap_file(unsigned char *cap_file_name, unsigne
     return RetVal;
 }
 
+
+// Convert timestamps to 5 bytes, downscale precision to 1us if requested and write to CAP file.
+__int32 ConvertAndWriteCaptureData(HANDLE hCAP, unsigned __int8 *pucTapeBuffer, __int32 iCaptureLen, unsigned __int32 uiPrecision, unsigned __int32 *puiTotalTapeTimeSeconds, unsigned __int32 *puiNumSignals)
+{
+    unsigned __int64 ui64Delta, ui64TotalTapeTime = 0;
+    __int32          FuncRes, i = 0;
+
+    *puiTotalTapeTimeSeconds = 0;
+    *puiNumSignals = 0;
+
+    while (i < iCaptureLen)
+    {
+        ui64Delta = pucTapeBuffer[i];
+        ui64Delta = (ui64Delta << 8) + pucTapeBuffer[i+1];
+
+        if (ui64Delta < 0x8000)
+        {
+            // Short signal (<2ms)
+            i += 2;
+        }
+        else
+        {
+            // Long signal (>=2ms)
+            ui64Delta &= 0x7fff;
+            ui64Delta = (ui64Delta << 8) + pucTapeBuffer[i+2];
+            ui64Delta = (ui64Delta << 8) + pucTapeBuffer[i+3];
+            ui64Delta = (ui64Delta << 8) + pucTapeBuffer[i+4];
+            i += 5;
+        }
+
+        ui64TotalTapeTime += ui64Delta;
+        (*puiNumSignals)++;
+
+        if (uiPrecision == 1) ui64Delta = (ui64Delta + 8) >> 4; // downscale by 16
+
+        FuncRes = CAP_WriteSignal(hCAP, ui64Delta, NULL);
+        if (FuncRes != CAP_Status_OK)
+        {
+            CAP_OutputError(FuncRes);
+            return -1;
+        }
+    }
+
+    // Calculate tape length in seconds.
+    *puiTotalTapeTimeSeconds = (unsigned __int32) (((ui64TotalTapeTime + 8000000) >> 10)/15625); //16000000;
+
+    return 0;
+}
+
+// Read tape image into memory.
+EXTERN __int32 CBMAPIDECL cap_file_ReadTapeBuffer(HANDLE hCAP, unsigned __int8 *pucTapeBuffer, __int32 *piCaptureLen, 
+  unsigned __int32 *puiTotalTapeTimeSeconds,
+  BOOL StartDelayActivated, BOOL StopDelayActivated,
+  unsigned __int32 StartDelay, unsigned __int32 StopDelay)
+{
+    unsigned __int64 ui64Delta = 0, ShortWarning, ShortError, MinLength, ui64TotalTapeTime = 0;
+    __int32          FuncRes;
+    BOOL             FirstSignal = TRUE;
+
+    // Seek to start of image file and read image header, extract & verify header contents, seek to start of image data.
+    FuncRes = CAP_ReadHeader(hCAP);
+    if (FuncRes != CAP_Status_OK)
+    {
+        CAP_OutputError(FuncRes);
+        return -1;
+    }
+
+    // Get all header entries at once.
+    FuncRes = CAP_GetHeader(hCAP, &CAP_Precision, &CAP_Machine, &CAP_Video, &CAP_StartEdge, &CAP_SignalFormat, &CAP_SignalWidth, &CAP_StartOfs);
+    if (FuncRes != CAP_Status_OK)
+    {
+        CAP_OutputError(FuncRes);
+        return -1;
+    }
+
+    if (CAP_Precision == 16)
+    {
+        ShortWarning = 16*75; // 75us
+        ShortError = 16*60;   // 60us
+    }
+    else
+    {
+        ShortWarning = 75; // 75us
+        ShortError = 60;   // 60us
+    }
+
+    // Keep space for leading number of deltas.
+    *piCaptureLen = 5;
+
+    // Read timestamps, convert to 16MHz hardware resolution if necessary.
+    while ((FuncRes = CAP_ReadSignal(hCAP, &ui64Delta, NULL)) == CAP_Status_OK)
+    {
+        if (FirstSignal)
+        {
+            // Replace first timestamp with start delay if requested
+            if (StartDelayActivated == TRUE)
+            {
+                if (StartDelay == 0)
+                    ui64Delta = 1600; // 100us minimum
+                else
+                {
+                    ui64Delta = StartDelay;
+                    ui64Delta *= 15625; //16000000;
+                    ui64Delta <<= 10;
+                }
+            }
+            FirstSignal = FALSE;
+        }
+        else
+            if (CAP_Precision == 1) ui64Delta <<= 4; // Convert from 1MHz to 16MHz.
+
+        if (ui64Delta < ShortWarning) printf("Warning - Short signal length detected: 0x%.10X\n", ui64Delta);
+        if (ui64Delta < ShortError)
+        {
+            printf("Warning - Replaced by minimum signal length.\n");
+            ui64Delta = ShortError;
+        }
+
+        ui64TotalTapeTime += ui64Delta;
+
+        if (ui64Delta < 0x8000)
+        {
+            // Short signal (<2ms)
+            (*piCaptureLen) += 2;
+        }
+        else
+        {
+            // Long signal (>=2ms)
+            (*piCaptureLen) += 5;
+            pucTapeBuffer[*piCaptureLen-5] = (unsigned __int8) (((ui64Delta >> 32) & 0x7f) | 0x80); // MSB must be 1.
+            pucTapeBuffer[*piCaptureLen-4] = (unsigned __int8)  ((ui64Delta >> 24) & 0xff);
+            pucTapeBuffer[*piCaptureLen-3] = (unsigned __int8)  ((ui64Delta >> 16) & 0xff);
+        }
+        pucTapeBuffer[*piCaptureLen-2] = (unsigned __int8) ((ui64Delta >>  8) & 0xff);
+        pucTapeBuffer[*piCaptureLen-1] = (unsigned __int8) (ui64Delta & 0xff);
+    }
+
+    if (FuncRes == CAP_Status_Error_Reading_data)
+    {
+        CAP_OutputError(FuncRes);
+        return -1;
+    }
+
+    // Add final timestamp for stop delay
+    if (StopDelayActivated == TRUE)
+    {
+        if (StopDelay == 0xffffffff)
+            ui64Delta = 0xffffffffff;
+        else
+        {
+            ui64Delta = StopDelay;
+            ui64Delta *= 15625;
+            ui64Delta <<= 10; //16000000;
+        }
+
+        ui64TotalTapeTime += ui64Delta;
+
+        if (ui64Delta < 0x8000)
+        {
+            // Short signal (<2ms)
+            (*piCaptureLen) += 2;
+        }
+        else
+        {
+            // Long signal (>=2ms)
+            (*piCaptureLen) += 5;
+            pucTapeBuffer[*piCaptureLen-5] = (unsigned __int8) (((ui64Delta >> 32) & 0x7f) | 0x80); // MSB must be 1.
+            pucTapeBuffer[*piCaptureLen-4] = (unsigned __int8)  ((ui64Delta >> 24) & 0xff);
+            pucTapeBuffer[*piCaptureLen-3] = (unsigned __int8)  ((ui64Delta >> 16) & 0xff);
+        }
+        pucTapeBuffer[*piCaptureLen-2] = (unsigned __int8) ((ui64Delta >>  8) & 0xff);
+        pucTapeBuffer[*piCaptureLen-1] = (unsigned __int8) (ui64Delta & 0xff);
+    }
+
+    // Send number of delta bytes first.
+    pucTapeBuffer[0] = 0x80;
+    pucTapeBuffer[1] = ((*piCaptureLen-5) >> 24) & 0xff;
+    pucTapeBuffer[2] = ((*piCaptureLen-5) >> 16) & 0xff;
+    pucTapeBuffer[3] = ((*piCaptureLen-5) >>  8) & 0xff;
+    pucTapeBuffer[4] =  (*piCaptureLen-5) & 0xff;
+
+    // Calculate tape recording length.
+    *puiTotalTapeTimeSeconds = (unsigned __int32) ((ui64TotalTapeTime >> 10)/15625); //16000000;    
+
+    return 0;
+}
+
+
+// Write tape image to specified image file.
+EXTERN __int32 CBMAPIDECL cap_file_WriteTapeBuffer(HANDLE hCAP, unsigned __int8 *pucTapeBuffer, __int32 iCaptureLen, unsigned __int32 uiPrecision, unsigned __int32 *puiTotalTapeTimeSeconds, unsigned __int32 *puiNumSignals)
+{
+    // Convert timestamps to 5 bytes, downscale precision to 1us if requested and write to CAP file.
+    if (ConvertAndWriteCaptureData(hCAP, pucTapeBuffer, iCaptureLen, uiPrecision, puiTotalTapeTimeSeconds, puiNumSignals) == -1)
+        return -1;
+
+    return 0;
+}
+
 // Create (overwrite) an image file for writing.
 EXTERN int CBMAPIDECL cap_file_CreateFile(HANDLE *hHandle, char *pcFilename)
 {

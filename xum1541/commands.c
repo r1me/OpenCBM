@@ -8,7 +8,9 @@
  * 2 of the License, or (at your option) any later version.
  */
 #include "xum1541.h"
+#ifdef TAPE_COMMANDS_ONLY
 #include <tape_153x.c>
+#endif
 
 /*
  * Basic inline IO functions where each byte is processed as it is
