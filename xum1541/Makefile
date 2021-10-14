@@ -12,16 +12,19 @@
 # and board type (i.e., IO port/pin layout, peripherals, etc.)
 #
 # Currently, valid models are:
-# USBKEY: Atmel USB key development board with 8 MHz AT90USB1287 cpu
+# USBKEY: (unsupported) Atmel USB key development board with 8 MHz AT90USB1287 cpu
 # ZOOMFLOPPY: commercial board with 16 MHz ATmega32U2 cpu
-# BUMBLEB: Bumble-B with 16 MHz AT90USB162 cpu and IEC daughtercard
-# OLIMEX: Olimex dev board with 8 MHz AT90USB162 cpu and IEC daughtercard
-# TEENSY: Teensy 2.0 USB Development Board with 16 MHz ATMEGA32U4 cpu
+# BUMBLEB: (unsupported) Bumble-B with 16 MHz AT90USB162 cpu and IEC daughtercard
+# OLIMEX: (unsupported) Olimex dev board with 8 MHz AT90USB162 cpu and IEC daughtercard
+# TEENSY: (unsupported) Teensy 2.0 USB Development Board with 16 MHz ATMEGA32U4 cpu
 # PROMICRO: Arduino Pro Micro USB Development Board with 16 MHz ATMEGA32U4 cpu
 # PROMICRO_7406: Arduino Pro Micro USB Development Board with 16 MHz ATMEGA32U4 with a 7406
+# MINIMUS: (unsupported) Minimus AVR USB development board with 16 MHz AT90USB162 cpu with 16K flash
+# MINIMUS32: (unsupported) Minimus AVR 32K USB development board with 16 MHz ATmega32U2 cpu with 32K flash
 
-MODELS= USBKEY ZOOMFLOPPY BUMBLEB OLIMEX TEENSY2 PROMICRO PROMICRO_7406 PROMICRO_TAPE
-.PHONY: $(MODELS)
+MODELS= USBKEY ZOOMFLOPPY BUMBLEB OLIMEX TEENSY2 PROMICRO PROMICRO_7406 PROMICRO_TAPE MINIMUS MINIMUS32
+MODELS_SUPPORTED= ZOOMFLOPPY PROMICRO PROMICRO_7406 PROMICRO_TAPE
+.PHONY: $(MODELS) all unsupported
 
 # Enable to get debug printing via the UART (port D)
 #CFLAGS=    -DDEBUG -DDEBUG_LEVEL=DBG_INFO
@@ -31,7 +34,9 @@ MODELS= USBKEY ZOOMFLOPPY BUMBLEB OLIMEX TEENSY2 PROMICRO PROMICRO_7406 PROMICRO
 # Firmware version. Bump when changing the firmware code.
 XUMFW_VERSION= 08
 
-all: $(MODELS)
+all: $(MODELS_SUPPORTED)
+
+unsupported: $(MODELS)
 
 define MAKE_model
 $1:
@@ -80,18 +85,32 @@ CPUMODEL=	atmega32u4
 CPURATE=	16000000
 BOARD=		BOARD_PROMICRO_TAPE
 BOARD_OBJS=	board-promicro_tape.o
+else ifeq ($(MODEL),MINIMUS)
+CPUMODEL=	at90usb162
+CPURATE=	16000000
+BOARD=		BOARD_MINIMUS
+BOARD_OBJS=	board-minimus.o
+else ifeq ($(MODEL),MINIMUS32)
+CPUMODEL=	atmega32u2
+CPURATE=	16000000
+BOARD=		BOARD_MINIMUS32
+BOARD_OBJS=	board-minimus.o
 endif
 
 # Final name for firmware hex file
 MODELVERSION= xum1541-$(MODEL)-v$(XUMFW_VERSION)
 
 # Resulting full revision number for model and firmware version
-REVISION=$(shell grep '\#define $(MODEL)' xum1541.h | sed 's/\#define $(MODEL)//' | xargs printf "%02X")$(XUMFW_VERSION)
+REVISION=$(shell grep '\#define $(MODEL) ' xum1541.h | sed 's/\#define $(MODEL)//' | xargs printf "%02X")$(XUMFW_VERSION)
+
+# git revision or "unknown" if either not a git repo or git command unavailable
+GITREV=$(shell git describe --always --exclude '*' || echo 'unknown')
 
 # If we wanted to reduce inlining to save size, these flags might be a
 # good start:
 #   --param inline-call-cost=2 -finline-limit=3 -fno-inline-small-functions
 CFLAGS+= -DMODEL=$(MODEL) -DMODELNAME=\"$(MODEL)\" -DBOARD=$(BOARD) \
+        -D__XUM1541_GIT_REVISION__="\"$(GITREV)\"" \
         -DF_CPU=$(CPURATE)UL -DF_CLOCK=F_CPU -mmcu=$(CPUMODEL) \
         -Os -g -Werror -Wall -Wstrict-prototypes -Wundef \
         -Winline -Wno-error=inline -std=gnu99 -I . \

@@ -31,6 +31,8 @@
 #define PROMICRO                5
 #define PROMICRO_7406           6
 #define PROMICRO_TAPE           7
+#define MINIMUS                 8
+#define MINIMUS32               9
 
 #if MODEL == USBKEY
 #include "cpu-usbkey.h"
@@ -56,6 +58,12 @@
 #elif MODEL == PROMICRO_TAPE
 #include "cpu-promicro_tape.h"
 #include "board-promicro_tape.h"
+#elif MODEL == MINIMUS
+#include "cpu-minimus.h"
+#include "board-minimus.h"
+#elif MODEL == MINIMUS32
+#include "cpu-minimus.h"
+#include "board-minimus.h"
 #endif
 
 #include "xum1541_types.h"      // Version and protocol definitions
