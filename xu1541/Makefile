@@ -1,4 +1,4 @@
-.PHONY: all mrproper distclean clean all-linux firmware bootloader bootloader-avrusb bootloader-usbtiny update-bootloader misc update_tool program-avrusb program-usbtiny update-avrusb update-usbtiny update-bios-avrusb update-bios-usbtiny update-all-avrusb update-all-usbtiny diff terminal version xu1541lib xmingw exe cygwin
+.PHONY: all mrproper distclean clean all-linux firmware firmware-avrusb firmware-usbtiny bootloader bootloader-avrusb bootloader-usbtiny update-bootloader misc update_tool program-avrusb program-usbtiny update-avrusb update-usbtiny update-bios-avrusb update-bios-usbtiny update-all-avrusb update-all-usbtiny diff terminal version xu1541lib xmingw exe cygwin
 
 all:	all-linux
 
@@ -13,42 +13,48 @@ clean:
 
 all-linux: xu1541lib misc update_tool firmware bootloader update-bootloader
 
-firmware:
-	make -C firmware
+firmware firmware/firmware.hex:
+	$(MAKE) -C firmware
+
+firmware-avrusb: firmware/firmware.hex bootloader/bootloader-avrusb.hex
+	(head -n -1 firmware/firmware.hex; cat bootloader/bootldr-avrusb.hex) > firmware+bootloader-avrusb.hex
+
+firmware-usbtiny: firmware/firmware.hex bootloader/bootloader-usbtiny.hex
+	(head -n -1 firmware/firmware.hex; cat bootloader/bootldr-usbtiny.hex) > firmware+bootloader-usbtiny.hex
 
 bootloader: bootloader-avrusb bootloader-usbtiny
 
-bootloader-avrusb:
-	make -C bootloader -f Makefile-avrusb
+bootloader-avrusb bootloader/bootloader-avrusb.hex:
+	$(MAKE) -C bootloader -f Makefile-avrusb
 
-bootloader-usbtiny:
-	make -C bootloader -f Makefile-usbtiny
+bootloader-usbtiny bootloader/bootloader-usbtiny.hex:
+	$(MAKE) -C bootloader -f Makefile-usbtiny
 
 update-bootloader:
-	make -C update-bootloader
+	$(MAKE) -C update-bootloader
 
 misc:
-	make -C misc/
+	$(MAKE) -C misc/
 
 update_tool:
-	make -C update_tool/src/
+	$(MAKE) -C update_tool/src/
 
 program-avrusb: bootloader-avrusb
-	make -C bootloader -f Makefile-avrusb program
+	$(MAKE) -C bootloader -f Makefile-avrusb program
 
 program-usbtiny: bootloader-usbtiny
-	make -C bootloader -f Makefile-usbtiny program
+	$(MAKE) -C bootloader -f Makefile-usbtiny program
 
 update-firmware: firmware update_tool
 	./update_tool/xu1541_update ./firmware/firmware.hex
 
 update-bios-avrusb: update-avrusb
 update-avrusb: bootloader-avrusb update_tool update-bootloader
-	make -C update-bootloader program-avrusb
+	$(MAKE) -C update-bootloader program-avrusb
 
 update-bios-usbtiny: update-usbtiny
 update-usbtiny: bootloader-usbtiny update_tool update-bootloader
-	make -C update-bootloader program-usbtiny
+	$(MAKE) -C update-bootloader program-usbtiny
 
 update-all-avrusb: bootloader-avrusb update_tool update-bootloader firmware
 	./update_tool/xu1541_update ./update-bootloader/flash-firmware.hex -o=0x1000 ./bootloader/bootldr-avrusb.hex -R ./firmware/firmware.hex
@@ -57,22 +63,22 @@ update-all-usbtiny: bootloader-usbtiny update_tool update-bootloader firmware
 	./update_tool/xu1541_update ./update-bootloader/flash-firmware.hex -o=0x1000 ./bootloader/bootldr-usbtiny.hex -R ./firmware/firmware.hex
 
 diff:
-	make distclean
+	$(MAKE) distclean
 	cvs diff|view -
 
 terminal:
-	make -C update-bootloader terminal
+	$(MAKE) -C update-bootloader terminal
 
 version: misc
 	./misc/usb_echo_test
 
 xu1541lib:
-	make -C lib
+	$(MAKE) -C lib
 
 xmingw:
-	(export MINGW=1; make -C lib/)
-	(export MINGW=1; make -C misc/)
-	(export MINGW=1; make -C update_tool/src/)
+	(export MINGW=1; $(MAKE) -C lib/)
+	(export MINGW=1; $(MAKE) -C misc/)
+	(export MINGW=1; $(MAKE) -C update_tool/src/)
 
 exe:	misc update_tool
 
